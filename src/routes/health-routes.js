@@ -2,7 +2,11 @@ import express from 'express';
 
 const router = express.Router();
 
-router.get('/api/health', (req, res) => {
+/**
+ * Health check endpoint
+ * @route GET /health
+ */
+router.get('/', (req, res) => {
   res.json({ status: 'ok', message: 'Server is running.' });
 });
 
