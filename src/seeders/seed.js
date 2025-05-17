@@ -1,5 +1,7 @@
-import Profile from '../models/Profile.js';
+import { Profile, Contract, Job } from '../models/associations.js';
 import { profiles } from './data/profiles.js';
+import { contracts } from './data/contracts.js';
+import { jobs } from './data/jobs.js';
 import Seeder from './Seeder.js';
 import logger from '../utils/logger.js';
 
@@ -9,7 +11,9 @@ import logger from '../utils/logger.js';
 const seed = async () => {
   try {
     const seeder = new Seeder()
-      .addModel(Profile, profiles);
+      .addModel(Profile, profiles)
+      .addModel(Contract, contracts)
+      .addModel(Job, jobs);
 
     await seeder.seed();
     logger.info('Database seeding completed successfully');

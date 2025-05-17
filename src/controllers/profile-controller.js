@@ -34,5 +34,4 @@ class ProfileController {
   }
 }
 
-// Export a singleton instance
 export default new ProfileController(); 

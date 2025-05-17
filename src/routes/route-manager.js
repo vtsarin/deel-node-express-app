@@ -1,21 +1,9 @@
-import profileRoutes from './profile-routes.js';
-import healthRoutes from './health-routes.js';
+import { routes } from './routes-config.js';
 import logger from '../utils/logger.js';
 
 class RouteManager {
-  routes = [];
-
-  constructor() {
-    this.routes = [
-      {
-        path: '/api/health',
-        router: healthRoutes
-      },
-      {
-        path: '/api/profiles',
-        router: profileRoutes
-      }
-    ];
+  constructor(routes) {
+    this.routes = routes;
   }
 
   /**
@@ -31,4 +19,4 @@ class RouteManager {
 }
 
 // Export a singleton instance
-export default new RouteManager(); 
+export default new RouteManager(routes); 
