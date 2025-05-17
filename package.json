@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "start": "node src/server.js",
-    "dev": "nodemon src/server.js"
+    "dev": "nodemon src/server.js",
+    "seed": "node src/seeders/seed.js"
   },
   "keywords": [],
   "author": "",
@@ -16,6 +17,8 @@
     "dotenv": "^16.5.0",
     "express": "^5.1.0",
     "helmet": "^8.1.0",
+    "sequelize": "^6.37.7",
+    "sqlite3": "^5.1.7",
     "uuid": "^11.1.0",
     "winston": "^3.17.0"
   },

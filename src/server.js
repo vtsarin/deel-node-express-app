@@ -1,38 +1,35 @@
 // server.js
-import express from 'express';
-import helmet from 'helmet';
-import cors from 'cors';
-import { PORT } from './constant/env.js'
-import correlationId from './middleware/correlation-id.js';
-import requestLogger from './middleware/request-logger.js';
+import { PORT } from './constant/env.js';
 import logger from './utils/logger.js';
-import routes from './routes/index.js';
-import { errorHandler, notFoundHandler } from './middleware/index.js';
 import { setupProcessHandlers } from './utils/process-handlers.js';
+import sequelize from './config/database.js';
+import { createApplication } from './application.js';
 
-const app = express();
+/**
+ * Initialize and start the server
+ */
+const startServer = async () => {
+  try {
+    // Initialize database
+    await sequelize.sync();
+    logger.info('Database synchronized successfully');
 
-// Security and parsing middleware
-app.use(helmet()); // Basic security headers
-app.use(cors()); // Enable CORS
-app.use(express.json()); // Parse JSON bodies
-app.use(express.urlencoded({ extended: true })); // Parse URL-encoded bodies
+    // Create Express application
+    const app = createApplication();
 
-// Custom Application middlewares
-app.use(correlationId);
-app.use(requestLogger);
+    // Start server
+    const server = app.listen(PORT, () => {
+      logger.info(`Deel Node-Express Server running at http://localhost:${PORT}`);
+    });
 
-// Routes
-app.use(routes);
+    // Setup process handlers
+    setupProcessHandlers(server);
+  } catch (error) {
+    logger.error('Failed to start server:', error);
+    process.exit(1);
+  }
+};
 
-// Error handling middleware
-app.use(notFoundHandler); // 404 handler
-app.use(errorHandler); // Error handler
-
-// Start server and setup process handlers
-const server = app.listen(PORT, () => {
-  logger.info(`Deel Node-Express Server running at http://localhost:${PORT}`);
-});
-
-setupProcessHandlers(server);
+// Start the server
+startServer();
 
