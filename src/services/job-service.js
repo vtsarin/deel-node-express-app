@@ -1,68 +1,174 @@
-import { Job, Contract } from '../models/associations.js';
+import { Job, Contract, Profile } from '../models/associations.js';
+import logger from '../utils/logger.js';
+import { Op } from 'sequelize';
+import sequelize from '../models/database.js';
 
+/**
+ * Service class for handling job-related business logic and database operations
+ * @class JobService
+ */
 class JobService {
   /**
-   * Get all jobs with their related data
-   * @returns {Promise<Job[]>} Array of jobs
+   * Retrieves all jobs with their related contract data
+   * Business Rules:
+   * - Returns all jobs regardless of status
+   * - Includes related contract information
+   * - Used for job listings and overviews
+   * 
+   * @returns {Promise<Job[]>} Array of jobs with related data
+   * @throws {Error} If there's an error fetching jobs
    */
   async getAllJobs() {
     try {
-      return await Job.findAll({
+      logger.info('Fetching all jobs with related data');
+      const jobs = await Job.findAll({
         include: [{ model: Contract }]
       });
+      logger.info(`Successfully fetched ${jobs.length} jobs`);
+      return jobs;
     } catch (error) {
+      logger.error('Error in getAllJobs:', error);
       throw new Error(`Error fetching jobs: ${error.message}`);
     }
   }
 
   /**
-   * Get job by ID with related data
-   * @param {string|number} id - Job ID
-   * @returns {Promise<Job>} Job object
+   * Retrieves all unpaid jobs for active contracts where the user is either client or contractor
+   * Business Rules:
+   * - Returns only unpaid jobs (paid: false)
+   * - Only includes jobs from active contracts (status: 'in_progress')
+   * - User must be either the client or contractor of the contract
+   * - Includes related contract information
+   * 
+   * @param {Profile} profile - The authenticated user's profile
+   * @returns {Promise<Job[]>} Array of unpaid jobs with related data
+   * @throws {Error} If there's an error fetching jobs
    */
-  async getJobById(id) {
+  async getUnpaidJobs(profile) {
     try {
-      const job = await Job.findOne({
-        where: { id },
-        include: [{ model: Contract }]
+      logger.info(`Fetching unpaid jobs for profile ID: ${profile.id}`);
+
+      const jobs = await Job.findAll({
+        where: {
+          paid: false
+        },
+        include: [{
+          model: Contract,
+          where: {
+            status: 'in_progress',
+            [Op.or]: [
+              { ClientId: profile.id },
+              { ContractorId: profile.id }
+            ]
+          },
+          required: true
+        }]
       });
-      if (!job) {
-        throw new Error('Job not found');
-      }
-      return job;
+
+      logger.info(`Successfully fetched ${jobs.length} unpaid jobs for profile ID: ${profile.id}`);
+      return jobs;
     } catch (error) {
-      throw new Error(`Error fetching job: ${error.message}`);
+      logger.error('Error in getUnpaidJobs:', error);
+      throw new Error(`Error fetching unpaid jobs: ${error.message}`);
     }
   }
 
   /**
-   * Create a new job
-   * @param {Object} jobData - Job data
-   * @returns {Promise<Job>} Created job
+   * Process payment for a job
+   * Business Rules:
+   * - Job must exist and be unpaid
+   * - Contract must be active (not terminated)
+   * - Client must have sufficient balance
+   * - Client must be the authenticated user
+   * - Payment amount moves from client to contractor
+   * - Job is marked as paid
+   * 
+   * @param {string|number} jobId - ID of the job to pay for
+   * @param {Profile} profile - The authenticated user's profile (must be the client)
+   * @returns {Promise<Job>} Updated job with payment information
+   * @throws {Error} If payment cannot be processed
    */
-  async createJob(jobData) {
-    try {
-      return await Job.create(jobData);
-    } catch (error) {
-      throw new Error(`Error creating job: ${error.message}`);
-    }
-  }
+  async payForJob(jobId, profile) {
+    const transaction = await sequelize.transaction();
 
-  /**
-   * Update an existing job
-   * @param {string|number} id - Job ID
-   * @param {Object} updateData - Data to update
-   * @returns {Promise<Job>} Updated job
-   */
-  async updateJob(id, updateData) {
     try {
-      const job = await Job.findByPk(id);
+      logger.info(`Processing payment for job ID: ${jobId} by profile ID: ${profile.id}`);
+
+      // Get job with contract and related profiles
+      const job = await Job.findOne({
+        where: {
+          id: jobId,
+          paid: false
+        },
+        include: [{
+          model: Contract,
+          where: {
+            status: {
+              [Op.ne]: 'terminated'
+            }
+          },
+          include: [
+            { model: Profile, as: 'Client' },
+            { model: Profile, as: 'Contractor' }
+          ],
+          required: true
+        }],
+        transaction
+      });
+
       if (!job) {
-        throw new Error('Job not found');
+        throw new Error('Job not found or already paid');
       }
-      return await job.update(updateData);
+
+      // Verify client is the authenticated user
+      if (job.Contract.ClientId !== profile.id) {
+        throw new Error('Only the client can pay for this job');
+      }
+
+      // Verify client has sufficient balance
+      if (profile.balance < job.price) {
+        throw new Error('Insufficient balance to pay for this job');
+      }
+
+      // Update client balance
+      await Profile.update(
+        { balance: profile.balance - job.price },
+        {
+          where: { id: profile.id },
+          transaction
+        }
+      );
+
+      // Update contractor balance
+      await Profile.update(
+        { balance: job.Contract.Contractor.balance + job.price },
+        {
+          where: { id: job.Contract.ContractorId },
+          transaction
+        }
+      );
+
+      // Mark job as paid
+      const updatedJob = await Job.update(
+        {
+          paid: true,
+          paymentDate: new Date()
+        },
+        {
+          where: { id: jobId },
+          transaction,
+          returning: true
+        }
+      );
+
+      await transaction.commit();
+      logger.info(`Successfully processed payment for job ID: ${jobId}`);
+
+      return updatedJob;
     } catch (error) {
-      throw new Error(`Error updating job: ${error.message}`);
+      await transaction.rollback();
+      logger.error(`Error processing payment for job ID ${jobId}:`, error);
+      throw new Error(`Payment failed: ${error.message}`);
     }
   }
 }

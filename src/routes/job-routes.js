@@ -1,11 +1,13 @@
 import express from 'express';
 import jobController from '../controllers/job-controller.js';
+import profileAuth from '../middleware/profile-auth.js';
 
 const router = express.Router();
 
-router.get('/', jobController.getJobs);
-router.get('/:id', jobController.getJobById);
-router.post('/', jobController.createJob);
-router.put('/:id', jobController.updateJob);
+// Apply profile authentication middleware to all routes
+router.use(profileAuth);
 
-export const jobRouter = router; 
+router.get('/unpaid', jobController.getUnpaidJobs);
+router.post('/:job_id/pay', jobController.payForJob);
+
+export default router; 

@@ -1,64 +1,58 @@
 import jobService from '../services/job-service.js';
+import logger from '../utils/logger.js';
 
+/**
+ * Controller class for handling job-related HTTP requests
+ * @class JobController
+ */
 class JobController {
   /**
-   * Get all jobs
-   * @param {import('express').Request} req 
-   * @param {import('express').Response} res 
+   * Retrieves all unpaid jobs for active contracts where the user is either client or contractor
+   * HTTP Method: GET
+   * Route: /jobs/unpaid
+   * 
+   * @param {import('express').Request} req - Express request object with authenticated profile
+   * @param {import('express').Response} res - Express response object
+   * @returns {Promise<void>}
    */
-  async getJobs(req, res) {
+  async getUnpaidJobs(req, res) {
     try {
-      const jobs = await jobService.getAllJobs();
+      logger.info(`GET /jobs/unpaid - Fetching unpaid jobs for profile ID: ${req.profile.id}`);
+      const jobs = await jobService.getUnpaidJobs(req.profile);
+      logger.info(`GET /jobs/unpaid - Successfully returned ${jobs.length} unpaid jobs for profile ID: ${req.profile.id}`);
       res.json(jobs);
     } catch (error) {
+      logger.error('GET /jobs/unpaid - Error:', error);
       res.status(500).json({ error: error.message });
     }
   }
 
   /**
-   * Get job by ID
-   * @param {import('express').Request} req 
-   * @param {import('express').Response} res 
+   * Process payment for a job
+   * HTTP Method: POST
+   * Route: /jobs/:job_id/pay
+   * 
+   * @param {import('express').Request} req - Express request object with authenticated profile and job ID in params
+   * @param {import('express').Response} res - Express response object
+   * @returns {Promise<void>}
    */
-  async getJobById(req, res) {
+  async payForJob(req, res) {
     try {
-      const job = await jobService.getJobById(req.params.id);
-      res.json(job);
-    } catch (error) {
-      if (error.message === 'Job not found') {
-        res.status(404).json({ error: error.message });
-      } else {
-        res.status(500).json({ error: error.message });
-      }
-    }
-  }
+      const { job_id } = req.params;
+      logger.info(`POST /jobs/${job_id}/pay - Processing payment by profile ID: ${req.profile.id}`);
 
-  /**
-   * Create a new job
-   * @param {import('express').Request} req 
-   * @param {import('express').Response} res 
-   */
-  async createJob(req, res) {
-    try {
-      const job = await jobService.createJob(req.body);
-      res.status(201).json(job);
-    } catch (error) {
-      res.status(500).json({ error: error.message });
-    }
-  }
+      const updatedJob = await jobService.payForJob(job_id, req.profile);
 
-  /**
-   * Update an existing job
-   * @param {import('express').Request} req 
-   * @param {import('express').Response} res 
-   */
-  async updateJob(req, res) {
-    try {
-      const job = await jobService.updateJob(req.params.id, req.body);
-      res.json(job);
+      logger.info(`POST /jobs/${job_id}/pay - Successfully processed payment by profile ID: ${req.profile.id}`);
+      res.json(updatedJob);
     } catch (error) {
-      if (error.message === 'Job not found') {
-        res.status(404).json({ error: error.message });
+      logger.error(`POST /jobs/${req.params.job_id}/pay - Error:`, error);
+
+      if (error.message.includes('not found') ||
+        error.message.includes('already paid') ||
+        error.message.includes('Only the client') ||
+        error.message.includes('Insufficient balance')) {
+        res.status(400).json({ error: error.message });
       } else {
         res.status(500).json({ error: error.message });
       }
